@@ -403,6 +403,41 @@ export interface VaultClaimResult {
 }
 
 /**
+ * Polls until the submitted claim transaction reaches a terminal on-chain
+ * status. Resolves only on `SUCCESS`; a timeout (still `NOT_FOUND` after all
+ * attempts) is reported as pending, not success — the transaction may yet
+ * land, but we cannot confirm that here.
+ */
+export async function awaitVaultClaimConfirmation(
+  soroban: Pick<rpc.Server, 'getTransaction'>,
+  txHash: string,
+  opts: { maxAttempts?: number; delayMs?: number } = {},
+): Promise<void> {
+  const { maxAttempts = 30, delayMs = 1000 } = opts;
+
+  let result = await soroban.getTransaction(txHash);
+  let attempts = 1;
+
+  while (result.status === 'NOT_FOUND' && attempts < maxAttempts) {
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    result = await soroban.getTransaction(txHash);
+    attempts++;
+  }
+
+  if (result.status === 'SUCCESS') return;
+
+  if (result.status === 'FAILED') {
+    throw new Error(
+      'Claim transaction failed on-chain — it may have already been claimed or refunded.',
+    );
+  }
+
+  throw new Error(
+    `Claim transaction ${txHash} was submitted but has not confirmed yet — check its status on Stellar Expert before retrying to avoid a duplicate claim attempt.`,
+  );
+}
+
+/**
  * Builds, authorizes, and submits a real `claim` invocation. The connected
  * wallet pays the fee as the transaction source; the recipient's derived
  * stealth key separately authorizes the `recipient.require_auth()` the
@@ -491,22 +526,7 @@ export async function submitVaultClaim(params: {
   }
 
   const txHash = response.hash;
-
-  let attempts = 0;
-  while (attempts < 30) {
-    const result = await soroban.getTransaction(txHash);
-    if (result.status === 'NOT_FOUND') {
-      attempts++;
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      continue;
-    }
-    if (result.status === 'FAILED') {
-      throw new Error(
-        'Claim transaction failed on-chain — it may have already been claimed or refunded.',
-      );
-    }
-    break;
-  }
+  await awaitVaultClaimConfirmation(soroban, txHash);
 
   return { txHash };
 }

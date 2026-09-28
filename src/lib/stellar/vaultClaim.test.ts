@@ -12,6 +12,7 @@ import {
   formatVaultAmount,
   scanVaultAnnouncements,
   fetchVaultDepositEvents,
+  awaitVaultClaimConfirmation,
 } from './vaultClaim';
 
 function randomSignature(): Uint8Array {
@@ -184,5 +185,39 @@ describe('fetchVaultDepositEvents', () => {
       VAULT_CONTRACT_ID,
     );
     expect(events).toEqual([]);
+  });
+});
+
+describe('awaitVaultClaimConfirmation', () => {
+  it('resolves once the transaction reaches SUCCESS', async () => {
+    const getTransaction = vi
+      .fn()
+      .mockResolvedValueOnce({ status: 'NOT_FOUND' })
+      .mockResolvedValueOnce({ status: 'SUCCESS' });
+
+    await expect(
+      awaitVaultClaimConfirmation({ getTransaction }, 'deadbeef', { delayMs: 0 }),
+    ).resolves.toBeUndefined();
+    expect(getTransaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws when the transaction fails on-chain', async () => {
+    const getTransaction = vi.fn().mockResolvedValue({ status: 'FAILED' });
+
+    await expect(
+      awaitVaultClaimConfirmation({ getTransaction }, 'deadbeef', { delayMs: 0 }),
+    ).rejects.toThrow(/failed on-chain/);
+  });
+
+  it('reports a pending timeout instead of success when the status never resolves', async () => {
+    const getTransaction = vi.fn().mockResolvedValue({ status: 'NOT_FOUND' });
+
+    await expect(
+      awaitVaultClaimConfirmation({ getTransaction }, 'deadbeef', {
+        delayMs: 0,
+        maxAttempts: 3,
+      }),
+    ).rejects.toThrow(/has not confirmed yet/);
+    expect(getTransaction).toHaveBeenCalledTimes(3);
   });
 });
