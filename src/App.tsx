@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Header } from '@/components/Header';
 import { AutoSign } from '@/components/AutoSign';
@@ -6,7 +6,7 @@ import { TelemetryBanner } from '@/components/TelemetryBanner';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { UpdatePrompt } from '@/components/UpdatePrompt';
 import { RouteFallback } from '@/components/RouteFallback';
-import { RouteErrorBoundary } from '@/components/RouteErrorBoundary';
+import { RouteErrorBoundary, LazyPage } from '@/components/RouteErrorBoundary';
 import { HelpButton } from '@/components/HelpButton';
 import { useNotificationSW } from '@/hooks/useNotificationSW';
 import { useOfflineReconcile } from '@/hooks/useOfflineReconcile';
@@ -26,19 +26,22 @@ import { useOfflineQueueStore } from '@/stores/offlineQueueStore';
 // Each page (and the chain-specific wallet SDKs it pulls in — see
 // pages/Send.tsx and pages/Receive.tsx) loads on first navigation instead
 // of up front. RouteErrorBoundary + RouteFallback below handle the load.
-const Send = lazy(() => import('@/pages/Send'));
-const Receive = lazy(() => import('@/pages/Receive'));
-const Privacy = lazy(() => import('@/pages/Privacy'));
-const Vault = lazy(() => import('@/pages/Vault'));
-const Notifications = lazy(() => import('@/pages/Notifications'));
-const Schedule = lazy(() => import('@/pages/Schedule'));
-const StellarSplit = lazy(() => import('@/pages/StellarSplit'));
-const Names = lazy(() => import('@/pages/Names'));
-const NameProfile = lazy(() => import('@/pages/NameProfile'));
-const NamesAuctions = lazy(() => import('@/pages/NamesAuctions'));
-const Activity = lazy(() => import('@/pages/Activity'));
-const Portfolio = lazy(() => import('@/pages/Portfolio'));
-const Debug = lazy(() => import('@/pages/Debug'));
+// Loaders stay as plain module-level functions (not lazy() itself) so
+// LazyPage can construct a fresh lazy component on retry; see
+// RouteErrorBoundary.tsx for why that distinction matters.
+const loadSend = () => import('@/pages/Send');
+const loadReceive = () => import('@/pages/Receive');
+const loadPrivacy = () => import('@/pages/Privacy');
+const loadVault = () => import('@/pages/Vault');
+const loadNotifications = () => import('@/pages/Notifications');
+const loadSchedule = () => import('@/pages/Schedule');
+const loadStellarSplit = () => import('@/pages/StellarSplit');
+const loadNames = () => import('@/pages/Names');
+const loadNameProfile = () => import('@/pages/NameProfile');
+const loadNamesAuctions = () => import('@/pages/NamesAuctions');
+const loadActivity = () => import('@/pages/Activity');
+const loadPortfolio = () => import('@/pages/Portfolio');
+const loadDebug = () => import('@/pages/Debug');
 
 function SessionLock({ onUnlock }: { onUnlock: () => void }) {
   const [passphrase, setPassphrase] = useState('');
@@ -213,21 +216,21 @@ export function App() {
         <RouteErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
             <Routes>
-              <Route path="/send" element={<Send />} />
-              <Route path="/receive" element={<Receive />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/vault" element={<Vault />} />
-              <Route path="/notifications" element={<Notifications />} />
-              <Route path="/schedule" element={<Schedule />} />
-              <Route path="/stellar/split" element={<StellarSplit />} />
-              <Route path="/pay" element={<Send />} />
-              <Route path="/names" element={<Names />} />
-              <Route path="/n/:name" element={<NameProfile />} />
-              <Route path="/names/auctions" element={<NamesAuctions />} />
-              <Route path="/activity" element={<Activity />} />
-              <Route path="/history" element={<Activity />} />
-              <Route path="/portfolio" element={<Portfolio />} />
-              <Route path="/debug" element={<Debug />} />
+              <Route path="/send" element={<LazyPage loader={loadSend} />} />
+              <Route path="/receive" element={<LazyPage loader={loadReceive} />} />
+              <Route path="/privacy" element={<LazyPage loader={loadPrivacy} />} />
+              <Route path="/vault" element={<LazyPage loader={loadVault} />} />
+              <Route path="/notifications" element={<LazyPage loader={loadNotifications} />} />
+              <Route path="/schedule" element={<LazyPage loader={loadSchedule} />} />
+              <Route path="/stellar/split" element={<LazyPage loader={loadStellarSplit} />} />
+              <Route path="/pay" element={<LazyPage loader={loadSend} />} />
+              <Route path="/names" element={<LazyPage loader={loadNames} />} />
+              <Route path="/n/:name" element={<LazyPage loader={loadNameProfile} />} />
+              <Route path="/names/auctions" element={<LazyPage loader={loadNamesAuctions} />} />
+              <Route path="/activity" element={<LazyPage loader={loadActivity} />} />
+              <Route path="/history" element={<LazyPage loader={loadActivity} />} />
+              <Route path="/portfolio" element={<LazyPage loader={loadPortfolio} />} />
+              <Route path="/debug" element={<LazyPage loader={loadDebug} />} />
               <Route path="*" element={<Navigate to="/send" replace />} />
             </Routes>
           </Suspense>
